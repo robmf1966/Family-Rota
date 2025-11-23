@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, collection, getDoc, setLogLevel, query } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app/dist/index.esm.js';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth/dist/index.esm.js';
+import { getFirestore, doc, setDoc, onSnapshot, collection, getDoc, setLogLevel, query } from 'firebase/firestore/dist/index.esm.js';
 
 // --- Global Configuration (Provided by Canvas Environment) ---
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';

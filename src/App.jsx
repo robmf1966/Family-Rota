@@ -1,42 +1,53 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
+// These imports are needed for the component structure, but we will mock the initialization
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, getDoc, setLogLevel, query } from 'firebase/firestore';
 
-// --- Global Configuration (Provided by Canvas Environment) ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+// --- Placeholder for External Hosting ---
+// When hosted on Netlify, the standard environment variables do not exist.
+// We use a mock configuration to prevent the application from crashing on startup
+// and ensure the UI can still render. Firebase functionality will be disabled.
+const isExternalHost = typeof __firebase_config === 'undefined';
+
+const MOCK_FIREBASE_CONFIG = {
+    apiKey: "MOCK_API_KEY",
+    authDomain: "mock-domain.firebaseapp.com",
+    projectId: "mock-project-id",
+};
+
+// --- Global Configuration ---
+const appId = 'NETLIFY_HOSTED_APP'; // Use a fixed ID for the collection path
+const firebaseConfig = isExternalHost ? MOCK_FIREBASE_CONFIG : JSON.parse(__firebase_config);
+const initialAuthToken = isExternalHost ? null : (typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null);
 
 // --- App Constants ---
 const TASKS = ['Breakfast', 'Lunch', 'Dinner'];
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ROTA_COLLECTION_PATH = `artifacts/${appId}/public/data/family_care_rota_v2`;
-// Manually defined months for robust abbreviation (to avoid locale issues)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Application Version (v2.0) - Made edit name box smaller
-const APP_VERSION = 'v2.0';
-const weeksToDisplay = 8; // Rota displays 8 weeks forward
+// Application Version (v2.1) - Fix for External (Netlify) Hosting
+const APP_VERSION = 'v2.1 (Netlify Fix)';
+const weeksToDisplay = 8; 
 
 // --- Utility Functions ---
 
 /**
- * Calculates the Monday of the week containing the given date, or today if no date is given.
+ * Calculates the Monday of the week containing the given date.
  * @param {Date} date
  * @returns {Date}
  */
 const getMondayOfWeek = (date) => {
   const d = new Date(date);
-  const day = d.getDay(); // 0 (Sun) to 6 (Sat)
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday being 0 (Sun) to be the start of the *previous* week
+  const day = d.getDay(); 
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
   d.setHours(0, 0, 0, 0);
   return d;
 };
 
 /**
- * Formats a Date object into YYYY-MM-DD string for use as a database key.
+ * Formats a Date object into YYYY-MM-DD string.
  * @param {Date} date
  * @returns {string}
  */
@@ -48,7 +59,7 @@ const formatDate = (date) => {
 };
 
 /**
- * Generates a simple, unique color based on a string (for user name consistency).
+ * Generates a simple, unique color based on a string.
  * @param {string} str
  * @returns {string} HSL color string
  */
@@ -62,13 +73,13 @@ const stringToHslColor = (str) => {
 };
 
 /**
- * Helper function for UK date format (DD Mon) - Manually implemented for compatibility.
+ * Helper function for UK date format (DD Mon).
  * @param {Date} date
  * @returns {string} DD Mon (e.g., 23 Nov)
  */
 const getUKShortDate = (date) => {
   const day = String(date.getDate()).padStart(2, '0');
-  const month = MONTHS[date.getMonth()]; // Use the predefined month array
+  const month = MONTHS[date.getMonth()]; 
   return `${day} ${month}`;
 };
 
@@ -80,9 +91,13 @@ const RotaCell = React.memo(({ date, task, data, userId, userName, userColor, db
   const isMine = slot.claimedBy === userId;
   const displayClaimant = slot.name || '';
   const cellColor = slot.color || '';
-
+  
+  // NOTE: If db is null (in external hosting mode), handleToggle is disabled.
   const handleToggle = useCallback(async () => {
-    // Only allow interaction if user is authenticated and has set a name
+    if (isExternalHost) {
+        alert("Rota is in Offline/UI-Only Mode. Cannot connect to database.");
+        return;
+    }
     if (!userId || !userName || !db) {
         console.warn("Cannot toggle slot: User not authenticated or name not set.");
         return;
@@ -91,11 +106,9 @@ const RotaCell = React.memo(({ date, task, data, userId, userName, userColor, db
     const docRef = doc(db, collectionPath, docId);
     try {
       if (isMine) {
-        // Unclaim the slot (delete fields)
         await setDoc(docRef, { claimedBy: null, name: null, color: null }, { merge: true });
         console.log(`Slot ${docId} unclaimed.`);
       } else if (!isClaimed) {
-        // Claim the slot
         await setDoc(docRef, {
           claimedBy: userId,
           name: userName,
@@ -116,7 +129,7 @@ const RotaCell = React.memo(({ date, task, data, userId, userName, userColor, db
         rota-cell flex-1 p-2 h-16 sm:h-20
         text-center flex items-center justify-center font-semibold text-xs sm:text-sm
         border-r border-gray-200 last:border-r-0 cursor-pointer transition duration-200 ease-in-out
-        ${isClaimed ? 'shadow-inner' : 'bg-gray-100 hover:bg-indigo-50'}
+        ${isClaimed ? 'shadow-inner' : (isExternalHost ? 'bg-gray-200 cursor-not-allowed' : 'bg-gray-100 hover:bg-indigo-50')}
         ${isMine ? 'ring-2 ring-offset-2 ring-indigo-400' : ''}
       `}
       style={{ backgroundColor: isClaimed ? cellColor : 'inherit', color: isClaimed ? 'white' : 'currentColor' }}
@@ -126,16 +139,17 @@ const RotaCell = React.memo(({ date, task, data, userId, userName, userColor, db
             {displayClaimant}
         </span>
       ) : (
-        <span className="text-gray-400 font-normal italic">Tap to Claim</span>
+        <span className="text-gray-400 font-normal italic">
+            {isExternalHost ? 'OFFLINE' : 'Tap to Claim'}
+        </span>
       )}
     </div>
   );
 });
 
-// --- User Name Configuration Component ---
+// --- User Name Configuration Component (omitted for brevity) ---
 const UserNameInput = React.memo(({ userName, setUserName, userColor }) => {
   const [inputName, setInputName] = useState(userName);
-  // Start in editing mode only if the name is NOT set
   const [isEditing, setIsEditing] = useState(!userName); 
 
   const handleSave = (e) => {
@@ -144,11 +158,10 @@ const UserNameInput = React.memo(({ userName, setUserName, userColor }) => {
       const trimmedName = inputName.trim();
       setUserName(trimmedName);
       localStorage.setItem('rotaUserName', trimmedName);
-      setIsEditing(false); // Hide the form after successfully saving
+      setIsEditing(false); 
     }
   };
   
-  // Compact Status View: Displayed when the name is set and not editing
   if (userName && !isEditing) {
     return (
       <div className="p-4 bg-white shadow-xl rounded-xl mb-4 max-w-lg mx-auto flex justify-between items-center border-t-4 border-indigo-500">
@@ -156,10 +169,9 @@ const UserNameInput = React.memo(({ userName, setUserName, userColor }) => {
           Signed in as: 
           <span className="ml-2 font-extrabold text-xl" style={{ color: userColor }}>{userName}</span>
         </h2>
-        {/* UPDATED: Reduced padding and font size for a smaller button */}
         <button
           onClick={() => {
-            setInputName(userName); // Restore current name to input field before editing
+            setInputName(userName); 
             setIsEditing(true);
           }}
           className="px-2 py-1 bg-gray-200 text-gray-700 font-medium text-sm rounded-lg hover:bg-gray-300 transition duration-150 shadow-sm"
@@ -170,8 +182,6 @@ const UserNameInput = React.memo(({ userName, setUserName, userColor }) => {
     );
   }
 
-
-  // Full Input Form View: Displayed when name is not set OR when editing
   return (
     <div className="p-4 bg-white shadow-xl rounded-xl mb-4 max-w-lg mx-auto border-t-4 border-indigo-500">
       <h2 className="text-lg font-bold mb-2 text-indigo-700">Set Your Rota Identity</h2>
@@ -194,7 +204,7 @@ const UserNameInput = React.memo(({ userName, setUserName, userColor }) => {
       {userName && isEditing && (
         <button 
             onClick={() => {
-              setInputName(userName); // Revert back to the saved name
+              setInputName(userName); 
               setIsEditing(false);
             }} 
             className="mt-2 text-sm text-gray-500 hover:text-gray-700"
@@ -219,13 +229,18 @@ const App = () => {
   
   // --- 1. Firebase Initialization and Authentication ---
   useEffect(() => {
-    if (!firebaseConfig) {
-      console.error("Firebase config missing.");
+    // If hosted externally (Netlify), skip all Firebase setup, use mock data, and set loading to false.
+    if (isExternalHost) {
+      console.warn("External host detected. Running in UI-only (Offline) mode.");
       setLoading(false);
-      return;
+      setUserId('UI_USER'); // Mock user ID for local features
+      return; 
     }
 
     try {
+      const { initializeApp } = window.firebase || {}; // Use window.firebase if available (optional)
+      if (!initializeApp) throw new Error("Firebase SDK not properly imported or installed.");
+
       const app = initializeApp(firebaseConfig);
       const firestore = getFirestore(app);
       const auth = getAuth(app);
@@ -259,17 +274,18 @@ const App = () => {
       return () => unsubscribeAuth();
     } catch (e) {
       console.error("Firebase Initialization Error:", e);
+      // Set to load anyway, but with no DB connection.
       setLoading(false);
+      setUserId('INITIALIZATION_FAILED');
     }
   }, []);
 
   // --- 2. Real-time Firestore Listener (Runs only after Auth is complete) ---
   useEffect(() => {
-    if (!db || !userId) return;
+    if (isExternalHost || !db || !userId) return;
 
     setLoading(false);
     
-    // Set up the listener for the entire collection
     const collectionRef = collection(db, ROTA_COLLECTION_PATH);
     const unsubscribeSnapshot = onSnapshot(query(collectionRef), (snapshot) => {
       const newRotaData = {};
@@ -306,12 +322,11 @@ const App = () => {
         weekDates.push(date);
       }
       
-      const weekEnd = weekDates[6]; // Sunday is the last day in the weekDates array
+      const weekEnd = weekDates[6]; 
 
       weeks.push({
         id: formatDate(weekStart),
         dates: weekDates,
-        // Uses the robust, manually implemented date format
         weekRangeLabel: `Week ${getUKShortDate(weekStart)} - ${getUKShortDate(weekEnd)}`,
       });
     }
@@ -328,18 +343,22 @@ const App = () => {
     );
   }
 
-  // Determine if the user is ready to claim slots
-  const canClaim = !!userName && !!db && !!userId;
+  const canClaim = !!userName && !!userId && !isExternalHost;
 
   return (
     <div className="min-h-screen bg-gray-50 p-2 sm:p-4">
       
-      {/* --- Main Application Header --- */}
       <header className="text-center py-4 mb-4">
         <h1 className="text-3xl font-extrabold text-indigo-700">Family Care Rota</h1>
-        <p className={`text-xs mt-1 ${canClaim ? 'text-green-600' : 'text-red-500 font-semibold'}`}>
-            {canClaim ? 'Ready to Claim' : 'Please Set Your Name to Claim Slots'} ({APP_VERSION})
-        </p>
+        {isExternalHost ? (
+            <p className="text-sm mt-1 text-red-600 font-bold">
+                OFFLINE MODE: Database connection unavailable on this host. ({APP_VERSION})
+            </p>
+        ) : (
+            <p className={`text-xs mt-1 ${canClaim ? 'text-green-600' : 'text-red-500 font-semibold'}`}>
+                {canClaim ? 'Ready to Claim' : 'Please Set Your Name to Claim Slots'} ({APP_VERSION})
+            </p>
+        )}
       </header>
 
       <UserNameInput 
@@ -350,9 +369,8 @@ const App = () => {
 
       <div className="bg-white rounded-xl shadow-lg border border-gray-200">
         
-        {/* --- Sticky Task Header Block --- */}
+        {/* Sticky Task Header Block (omitted for brevity) */}
         <div className="sticky top-0 z-20 bg-indigo-600 text-white shadow-md">
-            {/* Row 1: Task Names */}
             <div className="flex font-bold text-center">
               <div className="w-1/4 p-2 text-sm sm:text-base border-r border-indigo-700">Day</div>
               {TASKS.map(task => (
@@ -362,15 +380,12 @@ const App = () => {
               ))}
             </div>
         </div>
-        {/* --- END Sticky Task Header Block --- */}
-
 
         {/* Scrolling Week/Day Content (Vertical) */}
         <div className="overflow-y-auto max-h-[80vh] rota-scroll-container">
           {rotaWeeks.map((week) => (
             <div key={week.id} className="mb-0">
               
-              {/* Week Separator - Shows "Week DD Mon - DD Mon" */}
               <h3 
                 className="p-2 bg-indigo-100 text-indigo-800 font-bold text-base border-b border-t border-indigo-300 shadow-sm text-center"
               >
@@ -390,7 +405,6 @@ const App = () => {
                     {/* Day Column (Vertical) */}
                     <div className="w-1/4 p-2 flex flex-col justify-center text-xs sm:text-sm font-bold border-r border-gray-200 bg-gray-50">
                       <span>{dayName}</span>
-                      {/* Display robust UK date format (DD Mon) */}
                       <span className="text-gray-500 font-normal text-xs">{ukDateString}</span>
                     </div>
                     
@@ -420,3 +434,4 @@ const App = () => {
 };
 
 export default App;
+

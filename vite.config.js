@@ -3,8 +3,17 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/', // Revert to standard root base
-  optimizeDeps: { // CRITICAL FIX: Explicitly optimize Firebase packages
+  base: './', // Keep this relative path for assets
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: `[name].js`,
+        chunkFileNames: `[name].js`,
+        assetFileNames: `[name].[ext]`
+      }
+    }
+  },
+  optimizeDeps: { 
     include: [
       'firebase/app',
       'firebase/auth',
